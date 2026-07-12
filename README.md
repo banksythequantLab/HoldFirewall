@@ -1,5 +1,7 @@
 # Dynamic Hold Firewall — a real-time spoliation guard
 
+> Part of the **[Nota.Lawyer CockroachDB E-Discovery Suite](https://github.com/banksythequantLab/ediscovery-suite)** — five agents, one entwined memory.
+
 **Nota.Lawyer suite · CockroachDB × AWS "Build with Agentic Memory"**
 
 The instant a litigation hold triggers, an agent must lock down responsive
