@@ -1,1 +1,1 @@
-{"docs": 200, "deleters": 4, "naive": 119, "serializable": 0}
+{"docs": 200, "deleters": 4, "naive": 68, "read_committed": 116, "serializable": 0}

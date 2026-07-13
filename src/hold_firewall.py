@@ -30,6 +30,10 @@ def setup():
     c = psycopg.connect(URL, autocommit=True)
     c.execute("""CREATE TABLE IF NOT EXISTS hold_docs(
         doc_id INT PRIMARY KEY, responsive BOOL, held BOOL, deleted BOOL)""")
+    try:  # or CockroachDB silently UPGRADES READ COMMITTED to SERIALIZABLE
+        c.execute("SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true")
+    except Exception as e:
+        print("note: could not enable READ COMMITTED:", repr(e)[:90])
     c.execute("DELETE FROM hold_docs")
     with c.cursor() as cur:
         cur.executemany("INSERT INTO hold_docs VALUES(%s,true,false,false)",
@@ -93,6 +97,29 @@ def deleter_serializable(worker):
                 continue        # a hold landed concurrently -> retry, re-read, back off
     c.close()
 
+# ---- apples-to-apples baseline: explicit READ COMMITTED on the SAME cluster ----
+def _rc_conn():
+    c = psycopg.connect(URL, autocommit=False)
+    c.isolation_level = psycopg.IsolationLevel.READ_COMMITTED
+    return c
+
+def hold_agent_rc():
+    c = _rc_conn()
+    for i in range(DOCS):
+        with c.transaction():
+            c.execute("UPDATE hold_docs SET held=true WHERE doc_id=%s AND responsive", (i,))
+    c.close()
+
+def deleter_rc(worker):
+    c = _rc_conn()
+    for i in range(DOCS):
+        with c.transaction():          # READ COMMITTED permits the read->write race
+            held = c.execute("SELECT held FROM hold_docs WHERE doc_id=%s", (i,)).fetchone()[0]
+            if not held:
+                time.sleep(GAP)
+                c.execute("UPDATE hold_docs SET deleted=true WHERE doc_id=%s", (i,))
+    c.close()
+
 def run(label, hold_fn, del_fn):
     reset()
     t = time.time()
@@ -109,17 +136,19 @@ if __name__ == "__main__":
     setup()
     print(f"{DELETERS} retention/cron deleters purge non-held docs while the hold")
     print(f"agent places a litigation hold on {DOCS} responsive documents, at once:\n")
-    naive = run("Naive check-then-delete:", hold_agent_naive, deleter_naive)
+    naive = run("Naive autocommit check-delete:", hold_agent_naive, deleter_naive)
+    rc    = run("READ COMMITTED (same cluster):", hold_agent_rc, deleter_rc)
     ser   = run("CockroachDB SERIALIZABLE:", hold_agent_serializable, deleter_serializable)
     print()
-    if naive > 0 and ser == 0:
-        print(f"Naive isolation DESTROYED {naive} held documents -- spoliation.")
-        print("SERIALIZABLE lost ZERO: the hold is a bulletproof, legally")
-        print("defensible snapshot. Every deleter that raced a hold was")
-        print("detected and forced to back off. That is the CockroachDB")
-        print("difference -- and the transaction log is the audit trail.")
+    if ser == 0 and (naive > 0 or rc > 0):
+        print(f"Weaker isolation DESTROYED held evidence: naive={naive}, "
+              f"READ COMMITTED={rc}. SERIALIZABLE lost ZERO -- SAME cluster, same")
+        print("workload, same contention: the ONLY variable is the isolation level.")
+        print("The hold is a bulletproof, legally defensible snapshot and the")
+        print("transaction log is the audit trail. This is the CockroachDB difference.")
     else:
-        print(f"naive spoliation={naive}, serializable spoliation={ser}")
+        print(f"naive={naive}, read_committed={rc}, serializable={ser}")
     import json
-    json.dump({"docs": DOCS, "deleters": DELETERS, "naive": naive, "serializable": ser},
+    json.dump({"docs": DOCS, "deleters": DELETERS, "naive": naive,
+               "read_committed": rc, "serializable": ser},
               open(r"B:\HoldFirewall\docs\spoliation_result.json", "w"))

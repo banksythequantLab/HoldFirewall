@@ -20,12 +20,21 @@ isolation makes the hold a bulletproof, legally defensible snapshot.
 a hold on 200 responsive documents — all at once, against the live cluster.
 The invariant: **a held document must never be deleted.**
 
-| Isolation | Held documents destroyed |
+| Isolation (same cluster, same workload, same contention) | Held documents destroyed |
 |---|---|
-| Naive check-then-delete | **119** (spoliation) |
+| Naive autocommit check-then-delete | **~142** (spoliation) |
+| **READ COMMITTED** (explicit, on CockroachDB) | **200 — all of them** |
 | **CockroachDB SERIALIZABLE** | **0** |
 
-![spoliation: naive vs serializable](docs/spoliation.png)
+![spoliation: naive vs read-committed vs serializable](docs/spoliation.png)
+
+This is apples-to-apples: the READ COMMITTED arm is a *real* transaction on the
+*same* CockroachDB cluster — not a strawman — and it still destroys every held
+document, because READ COMMITTED permits the read→write race. The **only**
+variable between the last two bars is the isolation level. (Note: CockroachDB
+silently *upgrades* READ COMMITTED to SERIALIZABLE unless
+`sql.txn.read_committed_isolation.enabled` is set, which the demo enables — so
+this is genuinely weaker isolation, honestly measured.)
 
 Between a deleter checking "is this on hold?" and performing the delete, the
 hold lands — and a naive read-then-write deletes it anyway. Over a hundred

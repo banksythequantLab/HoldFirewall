@@ -1,11 +1,11 @@
 4 retention/cron deleters purge non-held docs while the hold
 agent places a litigation hold on 200 responsive documents, at once:
 
-Naive check-then-delete:         evidence_destroyed=119  (4.9s)
-CockroachDB SERIALIZABLE:        evidence_destroyed=0    (9.9s)
+Naive autocommit check-delete:   evidence_destroyed=68   (4.6s)
+READ COMMITTED (same cluster):   evidence_destroyed=116  (10.9s)
+CockroachDB SERIALIZABLE:        evidence_destroyed=0    (10.5s)
 
-Naive isolation DESTROYED 119 held documents -- spoliation.
-SERIALIZABLE lost ZERO: the hold is a bulletproof, legally
-defensible snapshot. Every deleter that raced a hold was
-detected and forced to back off. That is the CockroachDB
-difference -- and the transaction log is the audit trail.
+Weaker isolation DESTROYED held evidence: naive=68, READ COMMITTED=116. SERIALIZABLE lost ZERO -- SAME cluster, same
+workload, same contention: the ONLY variable is the isolation level.
+The hold is a bulletproof, legally defensible snapshot and the
+transaction log is the audit trail. This is the CockroachDB difference.

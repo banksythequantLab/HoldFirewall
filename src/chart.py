@@ -4,9 +4,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 r = json.load(open(r"B:\HoldFirewall\docs\spoliation_result.json"))
-vals = [r["naive"], r["serializable"]]
-labels = ["Naive\ncheck-then-delete", "CockroachDB\nSERIALIZABLE"]
-colors = ["#f85149", "#3fb950"]
+vals = [r["naive"], r.get("read_committed", 0), r["serializable"]]
+labels = ["Naive\nautocommit", "READ COMMITTED\n(same cluster)", "CockroachDB\nSERIALIZABLE"]
+colors = ["#f85149", "#d29922", "#3fb950"]
 
 plt.rcParams.update({"figure.facecolor":"#0d1117","axes.facecolor":"#0d1117",
     "text.color":"#e6edf3","axes.labelcolor":"#e6edf3",
